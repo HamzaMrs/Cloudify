@@ -1,0 +1,102 @@
+/* Styles CSS additionnels pour CLOUD² */
+
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+/* Configuration des variables CSS */
+:root {
+  --volt: #a3e635;
+  --volt-dark: #84cc16;
+  --volt-light: #bef264;
+  --bg-primary: #020617;
+  --bg-secondary: #0f172a;
+  --bg-tertiary: #1e293b;
+}
+
+/* Animation du texte volt */
+.text-volt {
+  color: var(--volt);
+}
+
+.bg-volt {
+  background-color: var(--volt);
+}
+
+.border-volt {
+  border-color: var(--volt);
+}
+
+/* Effets de survol améliorés */
+.hover\:bg-volt:hover {
+  background-color: var(--volt);
+}
+
+.hover\:text-volt:hover {
+  color: var(--volt);
+}
+
+.hover\:border-volt:hover {
+  border-color: var(--volt);
+}
+
+/* Focus amélioration */
+.focus\:border-volt:focus {
+  border-color: var(--volt);
+}
+
+/* Effets de glow pour volt */
+.glow-volt {
+  box-shadow: 0 0 20px rgba(163, 230, 53, 0.3);
+}
+
+/* Animation pulse personnalisée */
+@keyframes pulse-volt {
+  0%, 100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.5;
+  }
+}
+
+.animate-pulse-volt {
+  animation: pulse-volt 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+}
+
+/* Gradient amélioré */
+.bg-gradient-volt {
+  background: linear-gradient(135deg, var(--volt) 0%, var(--volt-dark) 100%);
+}
+
+/* Amélioration des transitions */
+* {
+  transition-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/* Optimisation du rendu */
+.glass {
+  will-change: transform;
+}
+
+/* Amélioration de l'accessibilité */
+:focus-visible {
+  outline: 2px solid var(--volt);
+  outline-offset: 2px;
+}
+
+/* Effet de scan rétro */
+@keyframes scan {
+  0% {
+    transform: translateY(-100%);
+  }
+  100% {
+    transform: translateY(100vh);
+  }
+}
+
+.scanline-animate {
+  animation: scan 8s linear infinite;
+}
