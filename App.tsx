@@ -30,10 +30,14 @@ const App: React.FC = () => {
 
   const handleLogin = (e: React.FormEvent) => {
     e.preventDefault();
-    gsap.to(loginRef.current, { scale: 1.1, opacity: 0, duration: 0.5, ease: "back.in(1.7)", onComplete: () => {
-      setIsLoggedIn(true);
-      localStorage.setItem('cloud_session', 'active');
-    }});
+    // Mettre à jour immédiatement le state et le localStorage
+    setIsLoggedIn(true);
+    localStorage.setItem('cloud_session', 'active');
+    
+    // Animation de sortie uniquement pour l'effet visuel (optionnel)
+    if (loginRef.current) {
+      gsap.to(loginRef.current, { scale: 1.05, opacity: 0, duration: 0.3, ease: "power2.in" });
+    }
   };
 
   const handleLogout = () => {

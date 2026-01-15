@@ -2,63 +2,56 @@ version: '3.8'
 
 services:
   # ============================================
-  # PROJET PRINCIPAL : CLOUDIFY FRONTEND
+  # TIER 1 : FRONTEND CLOUDIFY (React + Nginx)
   # ============================================
-  cloudify-frontend:
+  frontend:
     build:
       context: .
       dockerfile: Dockerfile
     ports:
-      - "8080:80"
-    container_name: cloudify-frontend
-    networks:
-      - cloudify-network
-
-  # ============================================
-  # SILLY-AS-A-SERVICE : 4-TIER ARCHITECTURE
-  # ============================================
-  
-  # TIER 1 : Frontend Silly
-  silly-frontend:
-    build: ./silly-as-a-service/web-frontend
-    ports:
       - "80:80"
-    container_name: silly-frontend
+    container_name: cloudify-frontend
     depends_on:
-      - silly-api-gateway
+      - api-gateway
     networks:
       - cloudify-network
 
+  # ============================================
   # TIER 2 : API Gateway (Point d'entrée + Auth)
-  silly-api-gateway:
+  # ============================================
+  api-gateway:
     build: ./silly-as-a-service/api-gateway
     ports:
       - "3000:3000"
-    container_name: silly-api-gateway
+    container_name: api-gateway
     environment:
-      - USER_SERVICE_URL=http://silly-user-service:8080
+      - USER_SERVICE_URL=http://user-service:8080
       - SILLY_SERVICE_URL=http://silly-generator:5000
     depends_on:
-      - silly-user-service
+      - user-service
       - silly-generator
     networks:
       - cloudify-network
 
-  # TIER 3 : Service Métier - User Service (Go + Auth)
-  silly-user-service:
+  # ============================================
+  # TIER 3 : SERVICES MÉTIER
+  # ============================================
+  
+  # Service Métier - User Service (Go + Auth)
+  user-service:
     build: ./silly-as-a-service/user-service
-    container_name: silly-user-service
+    container_name: user-service
     environment:
-      - DB_HOST=silly-database
+      - DB_HOST=database
       - DB_USER=root
       - DB_PASSWORD=example
       - DB_NAME=silly_db
     depends_on:
-      - silly-database
+      - database
     networks:
       - cloudify-network
 
-  # TIER 3 : Service Métier - Silly Generator (Python + Logique absurde)
+  # Service Métier - Silly Generator (Python + Logique absurde)
   silly-generator:
     build: ./silly-as-a-service/silly-generator
     container_name: silly-generator
@@ -67,8 +60,10 @@ services:
     networks:
       - cloudify-network
 
-  # TIER 4 : Base de Données (MySQL avec persistence)
-  silly-database:
+  # ============================================
+  # TIER 4 : BASE DE DONNÉES (MySQL)
+  # ============================================
+  database:
     build: ./silly-as-a-service/database-service
     container_name: silly-database
     volumes:
