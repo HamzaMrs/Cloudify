@@ -6,28 +6,68 @@
 
 Application web SaaS innovante pour la gestion et la location de nuages atmosphériques.
 
-## 🚀 Installation et Démarrage
-
-**Prérequis:** Node.js 18+
-
-### Installation
+## 🚀 Quick Start (100% Docker)
 
 ```bash
-# 1. Installer les dépendances
-npm install
+# Lancer TOUT (6 conteneurs Docker)
+./start-all.sh
 
-# 2. Lancer le serveur de développement
-npm run dev
+# Ou manuellement
+docker-compose up --build
 ```
 
-L'application sera accessible sur **http://localhost:3000**
+**✅ Aucune commande npm/python/go locale nécessaire !**
 
-### Build Production
+**URLs** :
+- 🌐 Cloudify Frontend : http://localhost:8080
+- 🎭 Silly Frontend : http://localhost
+- 🔌 Silly API : http://localhost:3000
+
+📚 **Guide complet** : Voir [`DOCKER_COMPLET.md`](DOCKER_COMPLET.md)
+
+---
+
+## � Architecture (6 Conteneurs)
+
+```
+CLOUDIFY PRINCIPAL
+├── cloudify-frontend (React + Nginx)     → Port 8080
+
+SILLY-AS-A-SERVICE (4-Tier)
+├── TIER 1: silly-frontend (React + Nginx)     → Port 80
+├── TIER 2: silly-api-gateway (Express.js)     → Port 3000
+├── TIER 3: silly-user-service (Go + Auth)     → Interne
+├── TIER 3: silly-generator (Python + Flask)   → Interne
+└── TIER 4: silly-database (MySQL + Volume)    → Interne
+```
+
+---
+
+## � Conformité aux Consignes
+
+✅ **Lancé uniquement via docker-compose**  
+✅ **Aucune commande locale (npm/python/go)**  
+✅ **4+ Tiers distincts** (on en a 5 !)  
+✅ **Frontend servi via Nginx**  
+✅ **API Gateway avec Express.js**  
+✅ **Services métier** (Go + Python)  
+✅ **Base de données MySQL**  
+✅ **Réseau Docker interne**  
+✅ **Volume persistant**
+
+---
+
+## 🛑 Arrêter les Services
 
 ```bash
-npm run build
-npm run preview
+# Automatique
+./stop-all.sh
+
+# Ou manuel
+docker-compose down
 ```
+
+---
 
 ## 📦 Dépendances Installées
 

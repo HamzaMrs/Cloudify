@@ -1,0 +1,50 @@
+version: '3.8'
+
+services:
+  # TIER 1 : Accessible par l'utilisateur (Navigateur)
+  web-frontend:
+    build: ./web-frontend
+    ports:
+      - "80:80" 
+    depends_on:
+      - api-gateway
+
+  # TIER 2 : Le seul point d'entrée pour les données
+  api-gateway:
+    build: ./api-gateway
+    ports:
+      - "3000:3000"
+    environment:
+      - USER_SERVICE_URL=http://user-service:8080
+      - SILLY_SERVICE_URL=http://silly-generator:5000
+    depends_on:
+      - user-service
+      - silly-generator
+
+  # TIER 3 : Services métier (Pas de ports vers l'extérieur !)
+  user-service:
+    build: ./user-service
+    environment:
+      - DB_HOST=database-service
+      - DB_USER=root
+      - DB_PASSWORD=example
+      - DB_NAME=silly_db
+    depends_on:
+      - database-service
+
+  silly-generator:
+    build: ./silly-generator
+    environment:
+      - OPENWEATHER_API_KEY=votre_cle
+
+  # TIER 4 : Persistance
+  database-service:
+    build: ./database-service # Utile si tu as un Dockerfile avec des scripts .sql
+    volumes:
+      - db_data:/var/lib/mysql
+    environment:
+      MYSQL_ROOT_PASSWORD: example
+      MYSQL_DATABASE: silly_db
+
+volumes:
+  db_data:
