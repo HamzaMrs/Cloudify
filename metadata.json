@@ -1,7 +1,0 @@
-{
-  "name": "CLOUDIFY",
-  "description": "Leader mondial de la logistique atmosphérique. Location de parcelles de brume, surveillance satellite et gestion de flotte de cumulus.",
-  "requestFramePermissions": [
-    "geolocation"
-  ]
-}
