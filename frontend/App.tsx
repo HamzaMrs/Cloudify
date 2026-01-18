@@ -1,5 +1,6 @@
 
 import React, { useState, useEffect, useRef } from 'react';
+import axios from 'axios';
 import Sidebar from './components/Sidebar';
 import CloudInstanceCard from './components/CloudInstanceCard';
 import Troposphere from './components/Troposphere';
@@ -21,6 +22,12 @@ const App: React.FC = () => {
   const [history, setHistory] = useState<EvaporationLog[]>([]);
   const [userCredits, setUserCredits] = useState(142900.50);
   
+  // Auth State
+  const [username, setUsername] = useState('commandant_brume');
+  const [password, setPassword] = useState('password123');
+  const [loading, setLoading] = useState(false);
+  const [apiError, setApiError] = useState('');
+  
   const loginRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -28,15 +35,62 @@ const App: React.FC = () => {
     if (saved) setIsLoggedIn(true);
   }, []);
 
-  const handleLogin = (e: React.FormEvent) => {
+  // Fetch Absurd Clouds from Backend
+  useEffect(() => {
+    if (isLoggedIn) {
+      const fetchClouds = async () => {
+        try {
+          // Utilisation du port 3000 (API Gateway)
+          const res = await axios.get('http://localhost:3000/generate');
+          if (Array.isArray(res.data)) {
+            const mappedClouds = res.data.map((c: any) => ({
+              ...c,
+              rentedAt: new Date(c.rentedAt),
+              expiresAt: new Date(c.expiresAt)
+            }));
+            setInstances(mappedClouds);
+          }
+        } catch (err) {
+          console.error("Impossible de récupérer les nuages absurdes, utilisation des mocks", err);
+        }
+      };
+      
+      // Petit délai pour laisser l'animation se finir
+      setTimeout(fetchClouds, 1000);
+    }
+  }, [isLoggedIn]);
+
+  const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
-    // Mettre à jour immédiatement le state et le localStorage
-    setIsLoggedIn(true);
-    localStorage.setItem('cloud_session', 'active');
-    
-    // Animation de sortie uniquement pour l'effet visuel (optionnel)
-    if (loginRef.current) {
-      gsap.to(loginRef.current, { scale: 1.05, opacity: 0, duration: 0.3, ease: "power2.in" });
+    setLoading(true);
+    setApiError('');
+
+    try {
+      // Tentative de connexion via API Gateway -> User Service (Go)
+      // Si l'utilisateur n'existe pas, on tente une inscription automatique (UX "Silly")
+      try {
+        await axios.post('http://localhost:3000/login', { username, password });
+      } catch (loginErr: any) {
+        // Si 500 ou erreur, on tente l'inscription
+        console.log("Login failed, attempting auto-registration...", loginErr);
+        await axios.post('http://localhost:3000/register', { username, password });
+        // Et on réessaie le login
+        await axios.post('http://localhost:3000/login', { username, password });
+      }
+
+      // Succès
+      setIsLoggedIn(true);
+      localStorage.setItem('cloud_session', 'active');
+      localStorage.setItem('username', username);
+      
+      if (loginRef.current) {
+        gsap.to(loginRef.current, { scale: 1.05, opacity: 0, duration: 0.3, ease: "power2.in" });
+      }
+    } catch (err: any) {
+      console.error(err);
+      setApiError("Échec de l'authentification : " + (err.response?.data?.error || err.message));
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -90,17 +144,48 @@ const App: React.FC = () => {
              </div>
           </div>
           <form onSubmit={handleLogin} className="space-y-6 text-left">
+            {apiError && (
+              <div className="bg-red-100/80 border-2 border-red-300 backdrop-blur text-red-600 px-4 py-3 rounded-2xl relative mb-4 text-center font-bold">
+                {apiError}
+              </div>
+            )}
             <div className="space-y-2">
               <label className="text-[10px] font-black uppercase text-sky-400 tracking-widest ml-6">Matricule Commandant</label>
-              <input type="text" defaultValue="commandant_brume" className="w-full bg-white/50 border-4 border-sky-50 rounded-3xl px-8 py-5 text-sky-900 focus:border-sky-400 transition-all outline-none font-bold placeholder:text-sky-200" />
+              <input 
+                type="text" 
+                value={username}
+                onChange={(e) => setUsername(e.target.value)}
+                className="w-full bg-white/50 border-4 border-sky-50 rounded-3xl px-8 py-5 text-sky-900 focus:border-sky-400 transition-all outline-none font-bold placeholder:text-sky-200" 
+              />
             </div>
             <div className="space-y-2">
               <label className="text-[10px] font-black uppercase text-sky-400 tracking-widest ml-6">Badge de Vol</label>
-              <input type="password" defaultValue="••••••••" className="w-full bg-white/50 border-4 border-sky-50 rounded-3xl px-8 py-5 text-sky-900 focus:border-sky-400 transition-all outline-none" />
+              <input 
+                type="password" 
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                className="w-full bg-white/50 border-4 border-sky-50 rounded-3xl px-8 py-5 text-sky-900 focus:border-sky-400 transition-all outline-none" 
+              />
             </div>
-            <button type="submit" className="w-full bg-sky-500 hover:bg-sky-600 text-white font-black py-6 rounded-3xl uppercase tracking-[0.2em] text-sm btn-funky shadow-xl shadow-sky-100 mt-4 flex items-center justify-center gap-3">
-              <Rocket className="w-5 h-5" /> OUVRIR LE HANGAR
+            <button 
+              type="submit" 
+              disabled={loading}
+              className={`w-full bg-sky-500 hover:bg-sky-600 text-white font-black py-6 rounded-3xl uppercase tracking-[0.2em] text-sm btn-funky shadow-xl shadow-sky-100 mt-4 flex items-center justify-center gap-3 ${loading ? 'opacity-70 cursor-wait' : ''}`}
+            >
+              {loading ? (
+                <>
+                  <div className="animate-spin h-5 w-5 border-2 border-white border-t-transparent rounded-full"/>
+                  INITIALISATION...
+                </>
+              ) : (
+                <>
+                  <Rocket className="w-5 h-5" /> OUVRIR LE HANGAR
+                </>
+              )}
             </button>
+            <p className="text-center text-sky-400/60 text-xs font-bold uppercase tracking-widest mt-2">
+              Inscription automatique activée
+            </p>
           </form>
         </div>
       </div>

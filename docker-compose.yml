@@ -1,12 +1,10 @@
-version: '3.8'
-
 services:
   # ============================================
   # TIER 1 : FRONTEND CLOUDIFY (React + Nginx)
   # ============================================
   frontend:
     build:
-      context: .
+      context: ./frontend
       dockerfile: Dockerfile
     ports:
       - "80:80"
@@ -17,54 +15,41 @@ services:
       - cloudify-network
 
   # ============================================
-  # TIER 2 : API Gateway (Point d'entrée + Auth)
+  # TIER 2 : API Gateway (Auth + Proxy)
   # ============================================
   api-gateway:
-    build: ./silly-as-a-service/api-gateway
+    build: ./backend/api-gateway
     ports:
       - "3000:3000"
     container_name: api-gateway
     environment:
-      - USER_SERVICE_URL=http://user-service:8080
-      - SILLY_SERVICE_URL=http://silly-generator:5000
-    depends_on:
-      - user-service
-      - silly-generator
-    networks:
-      - cloudify-network
-
-  # ============================================
-  # TIER 3 : SERVICES MÉTIER
-  # ============================================
-  
-  # Service Métier - User Service (Go + Auth)
-  user-service:
-    build: ./silly-as-a-service/user-service
-    container_name: user-service
-    environment:
+      - BUSINESS_SERVICE_URL=http://business-api:5000
       - DB_HOST=database
       - DB_USER=root
       - DB_PASSWORD=example
       - DB_NAME=silly_db
     depends_on:
+      - business-api
       - database
     networks:
       - cloudify-network
 
-  # Service Métier - Silly Generator (Python + Logique absurde)
-  silly-generator:
-    build: ./silly-as-a-service/silly-generator
-    container_name: silly-generator
-    environment:
-      - OPENWEATHER_API_KEY=votre_cle
+  # ============================================
+  # TIER 3 : Business Logic (Node.js)
+  # ============================================
+  business-api:
+    build: ./backend/business-api
+    container_name: business-api
+    expose:
+      - "5000"
     networks:
       - cloudify-network
 
   # ============================================
-  # TIER 4 : BASE DE DONNÉES (MySQL)
+  # TIER 4 : Base de Données (MySQL)
   # ============================================
   database:
-    build: ./silly-as-a-service/database-service
+    build: ./backend/database
     container_name: silly-database
     volumes:
       - db_data:/var/lib/mysql
@@ -74,11 +59,9 @@ services:
     networks:
       - cloudify-network
 
-# Réseau Docker pour la communication inter-conteneurs
 networks:
   cloudify-network:
     driver: bridge
 
-# Volume persistant pour la base de données
 volumes:
   db_data:
