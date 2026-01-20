@@ -1,18 +1,31 @@
 
 import React, { useRef } from 'react';
 import { CloudInstance } from '../types';
-import { calculateLifeExpectancy } from '../services/cloudCalculator';
-import { Droplets, Wind, AlertTriangle, Cloud as CloudIcon, Shield, Zap, Sparkle } from 'lucide-react';
+import { Droplets, Wind, Cloud as CloudIcon, Clock } from 'lucide-react';
 import gsap from 'gsap';
 
 interface Props {
   instance: CloudInstance;
 }
 
+// Fonction pour calculer le temps restant avant expiration
+const getTimeRemaining = (expiresAt: Date) => {
+  const now = new Date();
+  const diff = new Date(expiresAt).getTime() - now.getTime();
+  if (diff <= 0) return { text: 'Expiré', hours: 0, isDanger: true };
+  const hours = Math.floor(diff / (1000 * 60 * 60));
+  const mins = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
+  return { 
+    text: `${hours}h ${mins}min`, 
+    hours, 
+    isDanger: hours < 1 
+  };
+};
+
 const CloudInstanceCard: React.FC<Props> = ({ instance }) => {
   const cardRef = useRef<HTMLDivElement>(null);
-  const timeLeft = calculateLifeExpectancy(instance.humidity, instance.area, instance.windSpeed);
-  const isDanger = timeLeft < 25;
+  const timeInfo = getTimeRemaining(instance.expiresAt);
+  const isDanger = timeInfo.isDanger;
 
   const onEnter = () => {
     if (cardRef.current) {
@@ -80,17 +93,17 @@ const CloudInstanceCard: React.FC<Props> = ({ instance }) => {
       <div className="mt-auto pt-4 border-t border-slate-100 relative z-10">
         <div className="flex justify-between items-center mb-2">
            <div className="flex items-center gap-1.5">
-              <Zap className={`w-3 h-3 ${isDanger ? 'text-rose-500' : 'text-amber-500'}`} />
-              <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Stabilité</span>
+              <Clock className={`w-3 h-3 ${isDanger ? 'text-rose-500' : 'text-sky-500'}`} />
+              <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Expire dans</span>
            </div>
-           <span className={`text-sm font-bold mono ${isDanger ? 'text-rose-500' : 'text-slate-600'}`}>{timeLeft}h</span>
+           <span className={`text-sm font-bold mono ${isDanger ? 'text-rose-500' : 'text-slate-600'}`}>{timeInfo.text}</span>
         </div>
         <div className="h-1.5 w-full bg-slate-100 rounded-full overflow-hidden">
           <div 
             className={`h-full rounded-full transition-all duration-1000 ${
                 isDanger ? 'bg-rose-500' : 'bg-sky-500'
             }`} 
-            style={{ width: `${Math.min(100, Math.max(8, (timeLeft / 200) * 100))}%` }} 
+            style={{ width: `${Math.min(100, Math.max(8, (timeInfo.hours / 24) * 100))}%` }} 
           />
         </div>
       </div>

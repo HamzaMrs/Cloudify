@@ -1,86 +1,199 @@
 
-import React, { useEffect, useRef, useState } from 'react';
-import gsap from 'gsap';
+import React, { useState } from 'react';
 import { CloudInstance } from '../types';
-import { Cloud, Droplets, Wind, Zap, Target, ShieldCheck, X, Navigation, LocateFixed } from 'lucide-react';
+import { Cloud, Droplets, Wind, MapPin, Maximize } from 'lucide-react';
 
 interface Props {
   instances: CloudInstance[];
 }
 
 const Troposphere: React.FC<Props> = ({ instances }) => {
-  const containerRef = useRef<HTMLDivElement>(null);
-  const [selectedCloud, setSelectedCloud] = useState<CloudInstance | null>(null);
+  const [hoveredCloud, setHoveredCloud] = useState<CloudInstance | null>(null);
 
-  useEffect(() => {
-    if (!containerRef.current) return;
-    gsap.from(".radar-node", {
-      scale: 0,
-      opacity: 0,
-      duration: 0.8,
-      stagger: 0.05,
-      ease: "power3.out"
-    });
-    gsap.to(".radar-sweep", { rotation: 360, duration: 15, repeat: -1, ease: "none" });
-  }, [instances]);
+  // Fonction pour formater les coordonnées
+  const formatCoords = (lat: number, lng: number) => {
+    const latDir = lat >= 0 ? 'N' : 'S';
+    const lngDir = lng >= 0 ? 'E' : 'O';
+    return `${Math.abs(lat).toFixed(2)}°${latDir}, ${Math.abs(lng).toFixed(2)}°${lngDir}`;
+  };
+
+  // Couleurs selon le type
+  const getCloudColor = (type: string) => {
+    const colors: Record<string, string> = {
+      'cumulus': '#38bdf8',
+      'stratus': '#94a3b8',
+      'nimbus': '#818cf8',
+      'cirrus': '#c084fc',
+      'storm': '#fbbf24',
+      'fog': '#9ca3af',
+      'rain': '#3b82f6',
+    };
+    return colors[type.toLowerCase()] || '#38bdf8';
+  };
+
+  // Positionner les nuages sur le radar (répartition en cercle)
+  const getCloudPosition = (index: number, total: number) => {
+    const angle = (index / total) * 2 * Math.PI - Math.PI / 2;
+    const radius = 30 + (index % 3) * 15; // Varie entre 30% et 60% du rayon
+    return {
+      x: 50 + radius * Math.cos(angle),
+      y: 50 + radius * Math.sin(angle)
+    };
+  };
 
   return (
-    <div ref={containerRef} className="relative w-full h-full bg-[#0c1524] overflow-hidden rounded-[2.5rem] border border-white/5 shadow-2xl flex flex-col group/radar">
-      <div className="absolute inset-0 opacity-[0.03] pointer-events-none bg-[radial-gradient(#0ea5e9_1.5px,transparent_1.5px)] [background-size:24px_24px]" />
-
-      <div className="absolute inset-0 flex items-center justify-center opacity-[0.1] pointer-events-none">
-        {[1200, 900, 600, 300].map(s => (
-          <div key={s} className="absolute border border-sky-400 rounded-full" style={{ width: s, height: s }} />
-        ))}
-      </div>
-
-      <div className="radar-sweep absolute inset-0 flex items-center justify-center pointer-events-none opacity-[0.15]">
-        <div className="w-[1500px] h-[1500px] bg-gradient-to-tr from-sky-500/40 via-transparent to-transparent rounded-full" style={{ clipPath: 'polygon(50% 50%, 100% 50%, 100% 0%, 50% 0%)' }} />
-      </div>
-
-      <div className="relative w-full h-full p-6 md:p-12 flex flex-wrap items-center justify-center gap-6 md:gap-12 overflow-y-auto custom-scrollbar z-20">
-        {instances.map((cloud, idx) => (
-          <button
-            key={cloud.id}
-            onClick={() => setSelectedCloud(cloud)}
-            className={`radar-node relative bg-white/5 backdrop-blur-md p-6 rounded-2xl border border-white/10 transition-all flex flex-col items-center min-w-[140px] md:min-w-[180px] hover:border-sky-500/50 hover:bg-white/10 shadow-xl`}
-          >
-            <div className="relative mb-3">
-                <div className="absolute -top-0.5 -right-0.5 w-2.5 h-2.5 bg-sky-400 rounded-full shadow-[0_0_10px_#0ea5e9]" />
-                <Cloud className="w-10 h-10 md:w-12 md:h-12 text-sky-400" />
-            </div>
-            <p className="text-[10px] font-black text-white italic tracking-tighter truncate w-full px-2 text-center uppercase">{cloud.name}</p>
-          </button>
-        ))}
-      </div>
-
-      {selectedCloud && (
-        <div className="absolute inset-0 z-[100] bg-[#0c1524]/90 backdrop-blur-xl p-8 flex flex-col items-center justify-center animate-in">
-          <button onClick={() => setSelectedCloud(null)} className="absolute top-8 right-8 p-3 bg-white/5 rounded-full text-white hover:text-sky-400"><X/></button>
-          <div className="max-w-xl w-full text-center space-y-8">
-             <div className="w-24 h-24 bg-sky-500/20 rounded-[2rem] flex items-center justify-center mx-auto border border-sky-500/30">
-                <Cloud className="w-12 h-12 text-sky-400" />
-             </div>
-             <div>
-                <h3 className="text-4xl font-black text-white italic tracking-tighter uppercase mb-2">{selectedCloud.name}</h3>
-                <p className="text-sky-400 font-black uppercase tracking-widest text-[10px]">Identifiant: {selectedCloud.id}</p>
-             </div>
-             <div className="grid grid-cols-2 gap-4">
-                {[
-                  {l:'H2O', v:`${selectedCloud.humidity}%`},
-                  {l:'VENT', v:`${selectedCloud.windSpeed}kt`},
-                  {l:'SLA', v:'99.9%'},
-                  {l:'PRIX', v:`${selectedCloud.creditsPerHour}C$`}
-                ].map((item,i)=>(
-                  <div key={i} className="bg-white/5 border border-white/5 p-4 rounded-xl">
-                    <p className="text-[9px] font-black text-sky-300 uppercase mb-1 tracking-widest">{item.l}</p>
-                    <p className="text-xl font-black text-white mono">{item.v}</p>
-                  </div>
-                ))}
-             </div>
+    <div className="w-full h-full flex flex-col bg-slate-900 rounded-3xl overflow-hidden">
+      {/* Header */}
+      <div className="flex items-center justify-between p-6 border-b border-slate-700/50">
+        <div className="flex items-center gap-4">
+          <div className="w-12 h-12 bg-gradient-to-br from-emerald-400 to-cyan-500 rounded-2xl flex items-center justify-center shadow-lg">
+            <Cloud className="w-6 h-6 text-white" />
+          </div>
+          <div>
+            <h2 className="text-2xl font-black text-white">Vue Satellite</h2>
+            <p className="text-emerald-400 text-sm font-medium">{instances.length} nuage{instances.length !== 1 ? 's' : ''} en orbite</p>
           </div>
         </div>
-      )}
+        <div className="flex items-center gap-2 bg-slate-800 px-4 py-2 rounded-xl">
+          <div className="w-2 h-2 bg-emerald-400 rounded-full animate-pulse" />
+          <span className="text-emerald-400 text-sm font-bold uppercase tracking-wider">Live</span>
+        </div>
+      </div>
+
+      {/* Radar View */}
+      <div className="flex-1 relative flex items-center justify-center p-8">
+        {/* Cercles concentriques du radar */}
+        <div className="relative w-full max-w-[500px] aspect-square">
+          {/* Cercles */}
+          {[1, 2, 3, 4].map((i) => (
+            <div
+              key={i}
+              className="absolute rounded-full border border-slate-600/40"
+              style={{
+                width: `${i * 25}%`,
+                height: `${i * 25}%`,
+                top: `${50 - i * 12.5}%`,
+                left: `${50 - i * 12.5}%`,
+              }}
+            />
+          ))}
+
+          {/* Lignes de croisement */}
+          <div className="absolute top-0 left-1/2 w-px h-full bg-slate-600/30" />
+          <div className="absolute top-1/2 left-0 w-full h-px bg-slate-600/30" />
+          <div className="absolute top-0 left-0 w-full h-full">
+            <div className="absolute top-1/2 left-1/2 w-[70%] h-px bg-slate-600/20 origin-left rotate-45 -translate-x-1/2 -translate-y-1/2" />
+            <div className="absolute top-1/2 left-1/2 w-[70%] h-px bg-slate-600/20 origin-left -rotate-45 -translate-x-1/2 -translate-y-1/2" />
+          </div>
+
+          {/* Centre du radar */}
+          <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-4 h-4 bg-emerald-500 rounded-full shadow-lg shadow-emerald-500/50" />
+
+          {/* Message si vide */}
+          {instances.length === 0 && (
+            <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 text-center">
+              <p className="text-slate-500 font-medium">Aucun nuage détecté</p>
+              <p className="text-slate-600 text-sm">Louez des nuages pour les voir ici</p>
+            </div>
+          )}
+
+          {/* Points des nuages */}
+          {instances.map((cloud, index) => {
+            const pos = getCloudPosition(index, instances.length);
+            const color = getCloudColor(cloud.type);
+            const isHovered = hoveredCloud?.id === cloud.id;
+            return (
+              <div
+                key={cloud.id}
+                className="absolute cursor-pointer z-10 group"
+                style={{
+                  left: `${pos.x}%`,
+                  top: `${pos.y}%`,
+                  transform: 'translate(-50%, -50%)'
+                }}
+                onMouseEnter={() => setHoveredCloud(cloud)}
+                onMouseLeave={() => setHoveredCloud(null)}
+              >
+                {/* Point principal */}
+                <div 
+                  className="w-4 h-4 rounded-full shadow-lg transition-transform group-hover:scale-150"
+                  style={{ 
+                    backgroundColor: color,
+                    boxShadow: `0 0 20px ${color}80`
+                  }}
+                />
+                {/* Pulse animation */}
+                <div 
+                  className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-6 h-6 rounded-full animate-ping opacity-30"
+                  style={{ backgroundColor: color }}
+                />
+                {/* Label */}
+                <div className="absolute top-6 left-1/2 -translate-x-1/2 whitespace-nowrap">
+                  <span className="text-xs font-bold text-white bg-slate-800/80 px-2 py-1 rounded">
+                    {cloud.name}
+                  </span>
+                </div>
+
+                {/* Tooltip au survol - attaché au point */}
+                {isHovered && (
+                  <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-3 z-50 pointer-events-none">
+                    <div className="bg-slate-800 border border-slate-600 rounded-xl p-4 shadow-2xl w-[220px]">
+                      <h4 className="font-bold text-white mb-3 pb-2 border-b border-slate-700 text-center">
+                        {cloud.name}
+                      </h4>
+                      <div className="space-y-2">
+                        <div className="flex items-center justify-between">
+                          <span className="flex items-center gap-2 text-slate-400 text-sm">
+                            <Droplets className="w-4 h-4 text-sky-400" />
+                            Humidité
+                          </span>
+                          <span className="text-white font-bold">{cloud.humidity}%</span>
+                        </div>
+                        <div className="flex items-center justify-between">
+                          <span className="flex items-center gap-2 text-slate-400 text-sm">
+                            <Wind className="w-4 h-4 text-indigo-400" />
+                            Vent
+                          </span>
+                          <span className="text-white font-bold">{cloud.windSpeed} km/h</span>
+                        </div>
+                        <div className="flex items-center justify-between">
+                          <span className="flex items-center gap-2 text-slate-400 text-sm">
+                            <MapPin className="w-4 h-4 text-rose-400" />
+                            Position
+                          </span>
+                          <span className="text-white font-bold text-xs">{formatCoords(cloud.lat, cloud.lng)}</span>
+                        </div>
+                        <div className="flex items-center justify-between">
+                          <span className="flex items-center gap-2 text-slate-400 text-sm">
+                            <Maximize className="w-4 h-4 text-emerald-400" />
+                            Surface
+                          </span>
+                          <span className="text-white font-bold">{cloud.area} km²</span>
+                        </div>
+                      </div>
+                    </div>
+                    {/* Flèche vers le point */}
+                    <div className="absolute top-full left-1/2 -translate-x-1/2 w-0 h-0 border-l-8 border-r-8 border-t-8 border-transparent border-t-slate-800" />
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      </div>
+
+      {/* Légende des types */}
+      <div className="p-4 border-t border-slate-700/50 flex flex-wrap justify-center gap-4">
+        {['cumulus', 'stratus', 'nimbus', 'cirrus', 'storm'].map(type => (
+          <div key={type} className="flex items-center gap-2">
+            <div 
+              className="w-3 h-3 rounded-full"
+              style={{ backgroundColor: getCloudColor(type) }}
+            />
+            <span className="text-slate-400 text-xs font-medium capitalize">{type}</span>
+          </div>
+        ))}
+      </div>
     </div>
   );
 };

@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect, useRef } from 'react';
 import axios from 'axios';
 import Sidebar from './components/Sidebar';
@@ -18,77 +17,124 @@ const App: React.FC = () => {
   const [activeTab, setActiveTab] = useState('dashboard');
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [isLoggedIn, setIsLoggedIn] = useState(false);
-  const [instances, setInstances] = useState<CloudInstance[]>(MOCK_CLOUDS as any);
+  const [instances, setInstances] = useState<CloudInstance[]>([]);
   const [history, setHistory] = useState<EvaporationLog[]>([]);
   const [userCredits, setUserCredits] = useState(142900.50);
+  const [availableClouds, setAvailableClouds] = useState<any[]>([]);
   
   // Auth State
-  const [username, setUsername] = useState('commandant_brume');
-  const [password, setPassword] = useState('password123');
+  const [username, setUsername] = useState('');
+  const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
   const [apiError, setApiError] = useState('');
   
   const loginRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    const saved = localStorage.getItem('cloud_session');
-    if (saved) setIsLoggedIn(true);
+    const token = localStorage.getItem('token');
+    if (token) {
+        setIsLoggedIn(true);
+        // On récupère aussi le username si possible
+        const savedUser = localStorage.getItem('username');
+        if (savedUser) setUsername(savedUser);
+    }
   }, []);
 
-  // Fetch Absurd Clouds from Backend
-  useEffect(() => {
-    if (isLoggedIn) {
-      const fetchClouds = async () => {
-        try {
-          // Utilisation du port 3000 (API Gateway)
-          const res = await axios.get('http://localhost:3000/generate');
-          if (Array.isArray(res.data)) {
-            const mappedClouds = res.data.map((c: any) => ({
-              ...c,
-              rentedAt: new Date(c.rentedAt),
-              expiresAt: new Date(c.expiresAt)
-            }));
-            setInstances(mappedClouds);
-          }
-        } catch (err) {
-          console.error("Impossible de récupérer les nuages absurdes, utilisation des mocks", err);
-        }
-      };
-      
-      // Petit délai pour laisser l'animation se finir
-      setTimeout(fetchClouds, 1000);
+  const fetchMarketplace = async () => {
+    try {
+      const res = await axios.get('http://localhost:3000/api/clouds/nearby?lat=48.8566&lng=2.3522&radius=10000');
+      if (res.data.status === 'success') {
+        // Filtre les nuages disponibles (supporte les deux formats d'API)
+        setAvailableClouds(res.data.clouds.filter((c: any) => 
+          c.is_available === true || c.availability === 'available'
+        ));
+      }
+    } catch (err) {
+      console.error("Erreur marketplace", err);
     }
+  };
+
+  const fetchMyClouds = async () => {
+    try {
+      const token = localStorage.getItem('token');
+      if (!token) return;
+      const res = await axios.get('http://localhost:3000/auth/my-clouds', {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      
+      if (res.data.status === 'success' && Array.isArray(res.data.clouds)) {
+        const mappedClouds = res.data.clouds.map((c: any) => ({
+          id: c.id,
+          name: c.name,
+          type: c.type,
+          lat: c.location.lat,
+          lng: c.location.lng,
+          humidity: c.density * 100,
+          windSpeed: 5,
+          area: c.size_km2,
+          status: 'Active',
+          rentedAt: new Date(c.rental.start_time),
+          expiresAt: new Date(c.rental.end_time),
+          ownerId: 'me',
+          creditsPerHour: parseFloat(c.price_per_hour)
+        }));
+        setInstances(mappedClouds);
+      }
+    } catch (err) {
+      console.error("Impossible de récupérer vos nuages", err);
+    }
+  };
+
+  // Fetch Current User Clouds
+  useEffect(() => {
+    let interval: any;
+
+    if (isLoggedIn) {
+      fetchMyClouds();
+      fetchMarketplace();
+
+      // Refresh marketplace every 10 seconds to show/hide rented clouds
+      interval = setInterval(fetchMarketplace, 10000);
+    } else {
+        setInstances([]);
+        setAvailableClouds([]);
+    }
+
+    return () => {
+        if (interval) clearInterval(interval);
+    };
   }, [isLoggedIn]);
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!username || !password) return setApiError("Veuillez remplir tous les champs");
+    
     setLoading(true);
     setApiError('');
 
     try {
-      // Tentative de connexion via API Gateway -> User Service (Go)
-      // Si l'utilisateur n'existe pas, on tente une inscription automatique (UX "Silly")
+      let res;
       try {
-        await axios.post('http://localhost:3000/login', { username, password });
+        res = await axios.post('http://localhost:3000/auth/login', { username, password });
       } catch (loginErr: any) {
-        // Si 500 ou erreur, on tente l'inscription
-        console.log("Login failed, attempting auto-registration...", loginErr);
-        await axios.post('http://localhost:3000/register', { username, password });
-        // Et on réessaie le login
-        await axios.post('http://localhost:3000/login', { username, password });
+        if (loginErr.response?.status === 401) {
+            // Tentative d'inscription si login échoue (UX Silly)
+            await axios.post('http://localhost:3000/auth/register', { username, password });
+            res = await axios.post('http://localhost:3000/auth/login', { username, password });
+        } else {
+            throw loginErr;
+        }
       }
 
-      // Succès
-      setIsLoggedIn(true);
-      localStorage.setItem('cloud_session', 'active');
+      const { token, user } = res.data;
+      localStorage.setItem('token', token);
       localStorage.setItem('username', username);
       
-      if (loginRef.current) {
-        gsap.to(loginRef.current, { scale: 1.05, opacity: 0, duration: 0.3, ease: "power2.in" });
-      }
+      // Connexion immédiate, pas d'attente d'animation
+      setIsLoggedIn(true);
     } catch (err: any) {
       console.error(err);
-      setApiError("Échec de l'authentification : " + (err.response?.data?.error || err.message));
+      setApiError(err.response?.data?.error || "Erreur de connexion");
     } finally {
       setLoading(false);
     }
@@ -96,35 +142,57 @@ const App: React.FC = () => {
 
   const handleLogout = () => {
     setIsLoggedIn(false);
-    localStorage.removeItem('cloud_session');
+    localStorage.removeItem('token');
+    localStorage.removeItem('username');
+    setInstances([]);
   };
 
-  const rentCloud = (name: string, price: number, type: CloudType) => {
-    if (userCredits < price) return alert("Fonds insuffisants. Veuillez créditer votre Compte-Gouttes.");
-    const newCloud: CloudInstance = {
-      id: `cl-${Math.floor(Math.random() * 999)}`,
-      name, type, lat: 20 + Math.random() * 20, lng: -20 + Math.random() * 40,
-      humidity: 75, windSpeed: 5, area: 1.5, status: 'Active',
-      rentedAt: new Date(), expiresAt: new Date(Date.now() + 3600000),
-      ownerId: 'user-1', creditsPerHour: price
-    };
-    setInstances([newCloud, ...instances]);
-    setUserCredits(prev => prev - price);
-    setActiveTab('fleet');
+  const rentCloud = async (cloudId: string | number, name: string, price: number, type: string) => {
+    try {
+        const token = localStorage.getItem('token');
+        const res = await axios.post(`http://localhost:3000/api/clouds/${cloudId}/rent`, {
+            duration_hours: 1
+        }, {
+            headers: { Authorization: `Bearer ${token}` }
+        });
+
+        if (res.data.status === 'success') {
+            // Rafraîchir le hangar ET le marketplace
+            await fetchMyClouds();
+            await fetchMarketplace();
+            setUserCredits(prev => prev - price);
+            setActiveTab('fleet');
+        }
+    } catch (err: any) {
+        alert(err.response?.data?.message || "Erreur lors de la location");
+    }
   };
 
-  const liquidateCloud = (id: string) => {
-    const cloud = instances.find(i => i.id === id);
-    if (!cloud) return;
-    setHistory([{
-      id: `log-${Date.now()}`,
-      cloudName: cloud.name,
-      evaporatedAt: new Date(),
-      volumeRecovered: cloud.area * 300,
-      creditsRefunded: cloud.creditsPerHour * 0.15
-    }, ...history]);
-    setInstances(instances.filter(i => i.id !== id));
-    setUserCredits(prev => prev + (cloud.creditsPerHour * 0.15));
+  const liquidateCloud = async (id: string | number) => {
+    try {
+        const token = localStorage.getItem('token');
+        await axios.post(`http://localhost:3000/api/clouds/${id}/release`, {}, {
+            headers: { Authorization: `Bearer ${token}` }
+        });
+        
+        const cloud = instances.find(i => i.id === id);
+        if (cloud) {
+            setHistory([{
+                id: `log-${Date.now()}`,
+                cloudName: cloud.name,
+                evaporatedAt: new Date(),
+                volumeRecovered: cloud.area * 300,
+                creditsRefunded: cloud.creditsPerHour * 0.15
+            }, ...history]);
+            setUserCredits(prev => prev + (cloud.creditsPerHour * 0.15));
+            
+            // Rafraîchir le hangar ET le marketplace
+            await fetchMyClouds();
+            await fetchMarketplace();
+        }
+    } catch (err) {
+        console.error("Erreur libération nuage", err);
+    }
   };
 
   if (!isLoggedIn) {
@@ -236,7 +304,7 @@ const App: React.FC = () => {
                       <div className="inline-flex items-center gap-3 bg-gradient-to-r from-sky-500 to-purple-500 text-white px-6 py-2 rounded-full text-[10px] font-black uppercase tracking-widest mb-10 shadow-lg rotate-[-2deg]">
                         <Activity className="w-4 h-4" /> STATUT ATMOSPHÉRIQUE : STABLE
                       </div>
-                      <h2 className="text-5xl lg:text-8xl font-black text-sky-950 italic tracking-tighter mb-10 leading-[0.85] uppercase">
+                      <h2 className="text-3xl lg:text-5xl font-black text-sky-950 italic tracking-tighter mb-10 leading-[0.85] uppercase">
                         VOTRE TÊTE <br/><span className="text-transparent bg-clip-text bg-gradient-to-r from-sky-500 to-purple-500">DANS NOS NUAGES.</span>
                       </h2>
                       <p className="text-sky-700/80 text-lg lg:text-2xl font-bold mb-12 leading-relaxed max-w-lg">
@@ -262,19 +330,19 @@ const App: React.FC = () => {
                   </div>
                 </div>
 
-                <div className="grid grid-cols-2 md:grid-cols-4 gap-6 lg:gap-10">
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-4 lg:gap-6">
                   {[
                     {l:'Flotte Active',v:instances.length,i:<CloudIcon/>, c:'text-sky-500', bg:'bg-sky-50', shadow: 'funky-shadow-sky'},
                     {l:'Solde Pilote',v:userCredits,i:<Droplet/>, c:'text-emerald-500', bg:'bg-emerald-50', p:true, shadow: 'funky-shadow-purple'},
                     {l:'Nuages Évaporés',v:history.length,i:<Ghost/>, c:'text-indigo-500', bg:'bg-indigo-50', shadow: 'funky-shadow-pink'},
-                    {l:'Unités de Captation',v:4,i:<Sparkles/>, c:'text-orange-500', bg:'bg-orange-50', shadow: 'funky-shadow-sky'}
+                    {l:'Captation',v:4,i:<Sparkles/>, c:'text-orange-500', bg:'bg-orange-50', shadow: 'funky-shadow-sky'}
                   ].map((s,i)=>(
-                    <div key={i} className={`fluffy-glass p-8 lg:p-10 rounded-[3rem] border-4 border-white flex flex-col items-center sm:items-start gap-6 group ${s.shadow}`}>
-                      <div className={`w-16 h-16 ${s.bg} ${s.c} rounded-2xl flex items-center justify-center shadow-inner group-hover:scale-110 group-hover:rotate-12 transition-all`}>{s.i}</div>
-                      <div className="min-w-0 flex-1">
-                        <p className="text-[10px] font-black uppercase text-sky-300 tracking-widest mb-2 truncate">{s.l}</p>
-                        <p className="text-2xl lg:text-3xl font-black text-sky-950 italic truncate">
-                            <CountUp value={s.v} prefix={s.p ? "C$" : ""} decimals={s.p ? 2 : 0} />
+                    <div key={i} className={`fluffy-glass p-4 lg:p-6 rounded-2xl lg:rounded-3xl border-2 border-white flex flex-col items-center text-center gap-3 group ${s.shadow} overflow-hidden`}>
+                      <div className={`w-12 h-12 lg:w-14 lg:h-14 ${s.bg} ${s.c} rounded-xl flex items-center justify-center shadow-inner group-hover:scale-110 transition-all flex-shrink-0`}>{s.i}</div>
+                      <div className="min-w-0 w-full">
+                        <p className="text-[9px] lg:text-[10px] font-black uppercase text-sky-300 tracking-wider mb-1 truncate">{s.l}</p>
+                        <p className="text-base lg:text-xl font-black text-sky-950 italic truncate">
+                            <CountUp value={s.v} prefix={s.p ? "" : ""} decimals={s.p ? 0 : 0} suffix={s.p ? " C$" : ""} />
                         </p>
                       </div>
                     </div>
@@ -311,36 +379,66 @@ const App: React.FC = () => {
             )}
 
             {activeTab === 'marketplace' && (
-              <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-10 lg:gap-14 animate-in">
-                {[
-                  { n: "Cumulus Starter", p: 15.5, t: CloudType.CUMULUS, d: "L'actif idéal pour l'ombrage résidentiel et les petits évènements." },
-                  { n: "Nimbus Hardcore", p: 125, t: CloudType.NIMBUS, d: "Pour les besoins intensifs en précipitations et stockage de rosée lourde." },
-                  { n: "Stratus Corporate", p: 42, t: CloudType.STRATUS, d: "Une couverture grise uniforme et professionnelle pour vos bureaux." },
-                  { n: "Cirrus Premium", p: 28, t: CloudType.CIRRUS, d: "Haute altitude, latence minimale, esthétique vaporeuse d'exception." },
-                ].map((item, i) => (
-                  <div key={i} className="fluffy-glass p-12 rounded-[4.5rem] flex flex-col group border-4 border-white funky-shadow-sky hover:funky-shadow-purple transition-all min-h-[400px]">
-                    <div className="w-20 h-20 bg-sky-50 rounded-[2.5rem] flex items-center justify-center mb-10 group-hover:scale-110 group-hover:rotate-[-10deg] transition-all shadow-inner border-4 border-white">
-                        <CloudIcon className="w-10 h-10 text-sky-400" />
+              <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-8 animate-in">
+                {availableClouds.length > 0 ? availableClouds.map((cloud) => (
+                  <div key={cloud.id} className="fluffy-glass p-8 rounded-[2.5rem] flex flex-col group border-4 border-white funky-shadow-sky hover:funky-shadow-purple transition-all">
+                    {/* Header avec icône et badge */}
+                    <div className="flex items-start justify-between mb-6">
+                      <div className="w-16 h-16 bg-sky-50 rounded-2xl flex items-center justify-center group-hover:scale-110 group-hover:rotate-[-5deg] transition-all shadow-inner border-2 border-white flex-shrink-0">
+                        <CloudIcon className="w-8 h-8 text-sky-400" />
+                      </div>
+                      <span className="bg-sky-100 text-sky-600 text-[10px] font-black px-3 py-1.5 rounded-full uppercase flex-shrink-0">{cloud.type}</span>
                     </div>
-                    <h3 className="text-3xl font-black italic tracking-tighter text-sky-950 mb-4 uppercase leading-none">{item.n}</h3>
-                    <p className="text-sky-600/70 text-base font-bold mb-10 flex-1 leading-relaxed">{item.d}</p>
-                    <div className="pt-8 border-t-4 border-sky-50 flex justify-between items-center">
-                       <div>
-                          <p className="text-[10px] font-black text-sky-300 uppercase tracking-widest mb-2">Tarification</p>
-                          <p className="text-3xl font-black text-sky-950 mono italic">{item.p} <span className="text-xs text-sky-300">C$/h</span></p>
+                    
+                    {/* Nom du nuage */}
+                    <h3 className="text-xl font-black italic tracking-tight text-sky-950 uppercase leading-tight mb-4 line-clamp-2">{cloud.name}</h3>
+                    
+                    {/* Infos techniques */}
+                    <div className="grid grid-cols-2 gap-3 mb-6">
+                      <div className="bg-sky-50/50 rounded-xl p-3">
+                        <p className="text-[9px] font-bold text-sky-400 uppercase">Surface</p>
+                        <p className="text-sm font-black text-sky-800">{cloud.size_km2} km²</p>
+                      </div>
+                      <div className="bg-sky-50/50 rounded-xl p-3">
+                        <p className="text-[9px] font-bold text-sky-400 uppercase">Altitude</p>
+                        <p className="text-sm font-black text-sky-800">{cloud.altitude_m} m</p>
+                      </div>
+                      <div className="bg-sky-50/50 rounded-xl p-3">
+                        <p className="text-[9px] font-bold text-sky-400 uppercase">Densité</p>
+                        <p className="text-sm font-black text-sky-800">{cloud.density}%</p>
+                      </div>
+                      <div className="bg-sky-50/50 rounded-xl p-3">
+                        <p className="text-[9px] font-bold text-sky-400 uppercase">Distance</p>
+                        <p className="text-sm font-black text-sky-800">{cloud.distance_km ? `${cloud.distance_km.toFixed(0)} km` : 'N/A'}</p>
+                      </div>
+                    </div>
+                    
+                    {/* Footer avec prix et bouton */}
+                    <div className="mt-auto pt-6 border-t-2 border-sky-100 flex justify-between items-center gap-4">
+                       <div className="min-w-0">
+                          <p className="text-[9px] font-black text-sky-300 uppercase tracking-widest mb-1">Prix/heure</p>
+                          <p className="text-2xl font-black text-sky-950 mono italic">{cloud.price_per_hour}<span className="text-xs text-sky-300 ml-1">C$</span></p>
                        </div>
-                       <button onClick={() => rentCloud(item.n, item.p, item.t as any)} className="bg-sky-500 text-white font-black px-10 py-5 rounded-2xl text-xs uppercase tracking-widest shadow-xl btn-funky">LOUER</button>
+                       <button 
+                         onClick={() => rentCloud(cloud.id, cloud.name, parseFloat(cloud.price_per_hour), cloud.type)} 
+                         className="bg-sky-500 hover:bg-sky-600 text-white font-black px-6 py-4 rounded-xl text-xs uppercase tracking-wider shadow-lg btn-funky flex-shrink-0"
+                       >
+                         LOUER
+                       </button>
                     </div>
                   </div>
-                ))}
+                )) : (
+                  <div className="col-span-full py-20 text-center">
+                    <Wind className="w-20 h-20 text-sky-200 mx-auto mb-6 animate-bounce" />
+                    <p className="text-2xl font-black text-sky-300 italic uppercase">Aucun nuage disponible</p>
+                    <p className="text-sky-400 font-bold mt-2">Dégagement atmosphérique total détecté.</p>
+                  </div>
+                )}
               </div>
             )}
 
             {activeTab === 'troposphere' && (
-              <div className="h-[600px] lg:h-[800px] animate-in relative group">
-                <div className="absolute -top-6 -left-6 bg-purple-500 text-white font-black text-[10px] px-6 py-2 rounded-full z-50 shadow-xl rotate-[-5deg] floating-sticker">
-                  SCAN_RADAR_TRADITIONNEL
-                </div>
+              <div className="h-[600px] lg:h-[800px] animate-in">
                 <Troposphere instances={instances} />
               </div>
             )}
@@ -393,12 +491,27 @@ const App: React.FC = () => {
                   <div className="fluffy-glass p-12 rounded-[4.5rem] border-4 border-white funky-shadow-sky overflow-hidden relative">
                      <h3 className="text-xl font-black italic text-sky-950 uppercase mb-8">Journal des Transactions</h3>
                      <div className="space-y-4">
-                        {[1,2,3].map(i => (
-                           <div key={i} className="flex justify-between items-center py-4 border-b border-sky-50">
-                              <span className="text-sm font-bold text-sky-600">Leasing - Parcelle #{100+i}</span>
-                              <span className="font-black text-rose-400">-15.5 C$</span>
+                        {instances.length === 0 && history.length === 0 ? (
+                           <div className="text-center py-8">
+                              <p className="text-sky-300 font-bold">Aucune transaction</p>
+                              <p className="text-sky-200 text-sm mt-2">Louez un nuage pour commencer</p>
                            </div>
-                        ))}
+                        ) : (
+                           <>
+                              {instances.map((cloud, i) => (
+                                 <div key={`rent-${cloud.id}`} className="flex justify-between items-center py-4 border-b border-sky-50">
+                                    <span className="text-sm font-bold text-sky-600">Location - {cloud.name}</span>
+                                    <span className="font-black text-rose-400">-{cloud.creditsPerHour} C$</span>
+                                 </div>
+                              ))}
+                              {history.map((log, i) => (
+                                 <div key={`evap-${log.id}`} className="flex justify-between items-center py-4 border-b border-sky-50">
+                                    <span className="text-sm font-bold text-indigo-400">Remboursement - {log.cloudName}</span>
+                                    <span className="font-black text-emerald-400">+{log.creditsRefunded.toFixed(2)} C$</span>
+                                 </div>
+                              ))}
+                           </>
+                        )}
                      </div>
                   </div>
                </div>

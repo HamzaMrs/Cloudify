@@ -81,5 +81,30 @@ body {
   height: 100%;
   border-radius: 1rem;
   z-index: 0;
+  font-family: 'Space Grotesk', sans-serif;
 }
+
+/* Fix Leaflet z-index issues */
+.leaflet-pane {
+  z-index: 1;
+}
+
+.leaflet-top, .leaflet-bottom {
+  z-index: 1000;
+}
+
+.leaflet-popup-content-wrapper {
+  border-radius: 1rem;
+  box-shadow: 0 10px 25px rgba(0,0,0,0.15);
+}
+
+.leaflet-popup-content {
+  margin: 0;
+  font-family: 'Space Grotesk', sans-serif;
+}
+
+.leaflet-popup-tip {
+  background: white;
+}
+
 /* Clean end of file */
