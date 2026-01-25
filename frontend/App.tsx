@@ -27,6 +27,8 @@ const App: React.FC = () => {
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
   const [apiError, setApiError] = useState('');
+  const [successMessage, setSuccessMessage] = useState('');
+  const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
   
   const loginRef = useRef<HTMLDivElement>(null);
 
@@ -111,9 +113,11 @@ const App: React.FC = () => {
     
     setLoading(true);
     setApiError('');
+    setSuccessMessage('');
 
     try {
       let res;
+      let isNewAccount = false;
       try {
         res = await axios.post('http://localhost:3000/auth/login', { username, password });
       } catch (loginErr: any) {
@@ -121,6 +125,7 @@ const App: React.FC = () => {
             // Tentative d'inscription si login échoue (UX Silly)
             await axios.post('http://localhost:3000/auth/register', { username, password });
             res = await axios.post('http://localhost:3000/auth/login', { username, password });
+            isNewAccount = true;
         } else {
             throw loginErr;
         }
@@ -129,6 +134,12 @@ const App: React.FC = () => {
       const { token, user } = res.data;
       localStorage.setItem('token', token);
       localStorage.setItem('username', username);
+      
+      // Afficher message de succès si nouveau compte
+      if (isNewAccount) {
+        setSuccessMessage(`Bienvenue ${username} ! Votre compte a été créé avec succès.`);
+        setTimeout(() => setSuccessMessage(''), 4000);
+      }
       
       // Connexion immédiate, pas d'attente d'animation
       setIsLoggedIn(true);
@@ -141,10 +152,21 @@ const App: React.FC = () => {
   };
 
   const handleLogout = () => {
+    setShowLogoutConfirm(true);
+  };
+
+  const confirmLogout = () => {
+    setShowLogoutConfirm(false);
     setIsLoggedIn(false);
     localStorage.removeItem('token');
     localStorage.removeItem('username');
     setInstances([]);
+    setUsername('');
+    setPassword('');
+  };
+
+  const cancelLogout = () => {
+    setShowLogoutConfirm(false);
   };
 
   const rentCloud = async (cloudId: string | number, name: string, price: number, type: string) => {
@@ -264,6 +286,45 @@ const App: React.FC = () => {
     <div className="flex flex-col lg:flex-row min-h-screen w-full overflow-x-hidden">
       <Sidebar activeTab={activeTab} setActiveTab={setActiveTab} isOpen={isSidebarOpen} onClose={() => setIsSidebarOpen(false)} />
       
+      {/* Toast de succès (création de compte) */}
+      {successMessage && (
+        <div className="fixed top-6 left-1/2 -translate-x-1/2 z-[200] animate-in slide-in-from-top">
+          <div className="bg-emerald-500 text-white px-8 py-4 rounded-2xl shadow-2xl flex items-center gap-3 font-bold">
+            <ShieldCheck className="w-6 h-6" />
+            {successMessage}
+          </div>
+        </div>
+      )}
+
+      {/* Modal de confirmation de déconnexion */}
+      {showLogoutConfirm && (
+        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-[200] flex items-center justify-center p-4">
+          <div className="bg-white rounded-3xl p-8 max-w-md w-full shadow-2xl border-4 border-sky-100 animate-in zoom-in">
+            <div className="text-center">
+              <div className="w-16 h-16 bg-rose-100 rounded-full flex items-center justify-center mx-auto mb-6">
+                <X className="w-8 h-8 text-rose-500" />
+              </div>
+              <h3 className="text-2xl font-black text-sky-950 mb-2">Quitter le hangar ?</h3>
+              <p className="text-sky-600 mb-8">Voulez-vous vraiment vous déconnecter de votre espace aérien ?</p>
+              <div className="flex gap-4">
+                <button 
+                  onClick={cancelLogout}
+                  className="flex-1 px-6 py-4 bg-sky-100 text-sky-700 font-bold rounded-2xl hover:bg-sky-200 transition-all"
+                >
+                  Annuler
+                </button>
+                <button 
+                  onClick={confirmLogout}
+                  className="flex-1 px-6 py-4 bg-rose-500 text-white font-bold rounded-2xl hover:bg-rose-600 transition-all"
+                >
+                  Déconnexion
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
       <div className="flex-1 flex flex-col h-screen overflow-hidden relative">
         <header className="h-24 lg:h-32 flex-shrink-0 flex items-center justify-between px-8 lg:px-16 bg-white/30 backdrop-blur-xl sticky top-0 z-[100] border-b-4 border-white">
            <div className="flex items-center gap-6">
@@ -285,6 +346,12 @@ const App: React.FC = () => {
                 <span className="text-base lg:text-lg font-black text-sky-950 mono relative z-10">
                   <CountUp value={userCredits} prefix="C$ " decimals={2} />
                 </span>
+              </div>
+              <div className="hidden sm:flex items-center gap-3 px-6 py-3 bg-sky-50 rounded-2xl border-2 border-sky-100">
+                <div className="w-8 h-8 bg-sky-500 rounded-full flex items-center justify-center text-white font-black text-sm">
+                  {(localStorage.getItem('username') || username || 'U').charAt(0).toUpperCase()}
+                </div>
+                <span className="font-bold text-sky-900 text-sm">{localStorage.getItem('username') || username}</span>
               </div>
               <button onClick={handleLogout} className="w-14 h-14 bg-rose-50 text-rose-500 rounded-2xl flex items-center justify-center hover:bg-rose-500 hover:text-white transition-all border-2 border-rose-100 shadow-lg btn-funky">
                 <X className="w-6 h-6" />
