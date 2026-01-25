@@ -389,6 +389,33 @@ app.get('/health', (req, res) => {
     res.json({ status: 'ok', service: 'business-api' });
 });
 
-app.listen(PORT, '0.0.0.0', () => {
-    console.log(`Business API running on port ${PORT}`);
+// ============================================
+// DB RETRY : Attendre que MySQL soit prêt
+// ============================================
+const connectWithRetry = async (retries = 15, delay = 3000) => {
+    for (let i = 0; i < retries; i++) {
+        try {
+            const connection = await mysql.createConnection(dbConfig);
+            await connection.query('SELECT 1');
+            await connection.end();
+            console.log('✅ Database connected successfully');
+            return true;
+        } catch (err) {
+            console.log(`⏳ DB not ready, retry ${i + 1}/${retries}...`);
+            await new Promise(res => setTimeout(res, delay));
+        }
+    }
+    console.error('❌ Could not connect to database after retries');
+    return false;
+};
+
+// Démarrer le serveur après connexion DB
+connectWithRetry().then((connected) => {
+    if (connected) {
+        app.listen(PORT, '0.0.0.0', () => {
+            console.log(`Business API running on port ${PORT}`);
+        });
+    } else {
+        process.exit(1);
+    }
 });
